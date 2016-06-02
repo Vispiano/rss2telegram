@@ -1,0 +1,17 @@
+[Database]
+Path = sqlite:///./base.db
+
+[Telegram]
+access_token = 
+chat = 
+
+[RSS]
+link = 
+
+[Export_params]
+delay_between_messages = 5
+pub_pause = 60
+log_file = logging.log
+
+[Bitly]
+access_token = 
