@@ -6,7 +6,9 @@ access_token =
 chat = 
 
 [RSS]
-link = 
+link1 =
+link2 =
+link3
 
 [Export_params]
 delay_between_messages = 5
