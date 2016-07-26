@@ -22,25 +22,27 @@ from sqlalchemy import Table, Column, Integer, String, ForeignKey, update, and_
 Base = declarative_base()
 
 
-class source(object):
+class Source(object):
 	""" Класс для парсинга RSS-канала.
 	Выделяет из общей информации только интереующие нас поля: Заголовок, ссылку, дату публикации.
 	"""
-	def __init__(self, link):
-		self.link = link
+	def __init__(self, config_links):
+		self.links = [config_links[i] for i in config_links]
 		self.news = []
 		self.refresh()
 
 	def refresh(self):
-		data = feedparser.parse(self.link)
-		self.news = [News(binascii.b2a_base64(i['title'].encode()).decode(),\
-			binascii.b2a_base64(i['link'].encode()).decode(),\
-			int(time.mktime(i['published_parsed']))) for i in data['entries']]
+		self.news = []
+		for i in self.links:
+			data = feedparser.parse(i)
+			self.news += [News(binascii.b2a_base64(i['title'].encode()).decode(),\
+				binascii.b2a_base64(i['link'].encode()).decode(),\
+				int(time.mktime(i['published_parsed']))) for i in data['entries']] 
 
 	def __repr__(self):
 		return "<RSS ('%s','%s')>" % (self.link, len(self.news))
 
-class bitly:
+class Bitly:
 	def __init__(self,access_token):
 		self.access_token = access_token
 
@@ -93,7 +95,7 @@ class News(Base):
 			datetime.fromtimestamp(self.publish))
 			# Для зрительного восприятия данные декодируется
 
-class database:
+class Database:
 	"""
 	Класс для обработки сессии SQLAlchemy.
 	Так же включает в себя минимальный набор методов, вызываемых в управляющем классе.
@@ -120,21 +122,20 @@ class database:
 		if self.session.query(News).filter_by(link = link).first(): return True
 		else: return False 
 	
-class export_bot:
+class ExportBot:
 	def __init__(self):
 		config = configparser.ConfigParser()
 		config.read('./config')
 		log_file = config['Export_params']['log_file']
 		self.pub_pause = int(config['Export_params']['pub_pause'])
 		self.delay_between_messages = int(config['Export_params']['delay_between_messages'])
-		logging.basicConfig(format = u'%(filename)s[LINE:%(lineno)d]# %(levelname)-8s \
-							[%(asctime)s] %(message)s',level = logging.INFO, filename = u'%s'%log_file)
-		self.db = database(config['Database']['Path'])
-		self.src = source(config['RSS']['link'])
+		logging.basicConfig(format = u'%(filename)s[LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s] %(message)s',level = logging.INFO, filename = u'%s'%log_file)
+		self.db = Database(config['Database']['Path'])
+		self.src = Source(config['RSS'])
 		self.chat_id = config['Telegram']['chat']
 		bot_access_token = config['Telegram']['access_token']
 		self.bot = telegram.Bot(token=bot_access_token)
-		self.bit_ly = bitly(config['Bitly']['access_token'])
+		self.bit_ly = Bitly(config['Bitly']['access_token'])
 	
 	def detect(self):
 		#получаем 30 последних постов из rss-канала
@@ -157,8 +158,7 @@ class export_bot:
 		line = [i for i in self.src.news]
 		#Выбор пересечний этих списков
 		for_publishing = list(set(line) & set(posts_from_db))
-		for_publishing.reverse()
-		print(for_publishing)
+		for_publishing = sorted(for_publishing, key=lambda news: news.date)
 		#Постинг каждого сообщений
 		for post in for_publishing:
 			text = '%s %s' % (base64.b64decode(post.text).decode('utf8'),\
